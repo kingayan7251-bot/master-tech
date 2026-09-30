@@ -85,7 +85,10 @@ $("#resetProducts").onclick=()=>{if(confirm("Reset products to the original samp
 }
 $("#searchForm").onsubmit=e=>{e.preventDefault();searchTerm=$("#searchInput").value.trim();renderProducts();$("#shop").scrollIntoView({behavior:"smooth"})};
 $("#searchInput").addEventListener("input",()=>{searchTerm=$("#searchInput").value.trim();renderProducts()});
-$("#sortSelect").onchange=renderProducts;$("#cartBtn").onclick=showCart;$("#accountBtn").onclick=showAccount;$("#adminBtn").onclick=e=>{e.preventDefault();showAdmin()};$("#closeModal").onclick=closeModal;$("#modalOverlay").addEventListener("click",e=>{if(e.target===$("#modalOverlay"))closeModal()});document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
+$("#sortSelect").onchange=renderProducts;$("#cartBtn").onclick=showCart;$("#accountBtn").onclick=showAccount;$("#adminBtn").onclick = e => {
+  e.preventDefault();
+  adminLogin();
+};("#closeModal").onclick=closeModal;$("#modalOverlay").addEventListener("click",e=>{if(e.target===$("#modalOverlay"))closeModal()});document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal()});
 $("#affiliateInfo").onclick=e=>{e.preventDefault();openModal("Affiliate disclosure",`<p>Some product buttons may use affiliate links. If a visitor buys through an approved affiliate link, the site owner may earn a commission at no extra cost to the buyer, subject to the merchant's terms.</p><p class="muted">This demo includes no live affiliate tracking by default. Add your own approved links and display a clear disclosure near relevant links.</p>`)};
 $("#aboutBtn").onclick=e=>{e.preventDefault();openModal("About Master Tech","<p>Master Tech is a technology shopping and discovery concept. This first version is a frontend prototype with sample products, local cart state, and a browser-only demo admin panel.</p>")};
 document.querySelectorAll("[data-cat]").forEach(a=>a.onclick=()=>{activeCategory=a.dataset.cat;renderCategories();renderProducts()});
@@ -93,6 +96,72 @@ $("#year").textContent=new Date().getFullYear();renderCategories();renderProduct
 
 const SUPABASE_URL = "https://deagzkpdanbbcbevjiwu.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_t2BEHHDDVMn9LizhHVJ7Qg_FqvqJv71";
+let supabaseAccessToken = null;
+
+async function adminLogin() {
+  openModal("Admin Login", `
+    <form id="adminLoginForm">
+      <div class="field">
+        <label>Email</label>
+        <input name="email" type="email" required
+          placeholder="Your admin email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input name="password" type="password" required
+          placeholder="Your password">
+      </div>
+      <button class="btn btn-primary" type="submit">
+        Login
+      </button>
+    </form>
+  `);
+
+  $("#adminLoginForm").onsubmit = async e => {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    const button = e.target.querySelector("button");
+    button.disabled = true;
+    button.textContent = "Logging in...";
+
+    try {
+      const response = await fetch(
+        `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SUPABASE_PUBLISHABLE_KEY
+          },
+          body: JSON.stringify({
+            email: form.get("email"),
+            password: form.get("password")
+          })
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.msg || data.message || "Login failed");
+      }
+
+      if (data.user.id !==
+        "445c2922-2710-43a3-978b-6f7c678b1873") {
+        throw new Error("This account is not the admin account.");
+      }
+
+      supabaseAccessToken = data.access_token;
+      closeModal();
+      showAdmin();
+      toast("Admin login successful!");
+    } catch (error) {
+      alert(error.message || "Login failed. Please try again.");
+      button.disabled = false;
+      button.textContent = "Login";
+    }
+  };
+}
 
 async function loadSupabaseProducts() {
   try {
