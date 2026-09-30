@@ -78,8 +78,65 @@ function showCart(){let lines=cart.map(item=>{const p=products.find(x=>x.id===it
 function changeQty(id,delta){const item=cart.find(x=>x.id===id);if(item)item.qty+=delta;cart=cart.filter(x=>x.qty>0);save();renderCartCount();showCart()}
 function showAccount(){openModal("Account — demo",`<p>This first version has no real user authentication. Login forms alone are not secure accounts.</p><div class="form-grid"><div><h3>Sign in</h3><div class="field"><label>Email</label><input type="email" placeholder="you@example.com"></div><div class="field"><label>Password</label><input type="password" placeholder="Password"></div><button class="btn btn-primary" id="fakeLogin">Demo sign in</button></div><div><h3>Create account</h3><div class="field"><label>Name</label><input placeholder="Full name"></div><div class="field"><label>Email</label><input type="email" placeholder="you@example.com"></div><div class="field"><label>Password</label><input type="password" placeholder="Create password"></div><button class="btn btn-light" id="fakeSignup">Demo signup</button></div></div><p class="muted">Do not enter a real password. This form does not send or store credentials.</p>`);$("#fakeLogin").onclick=()=>toast("Demo only — authentication is not connected.");$("#fakeSignup").onclick=()=>toast("Demo only — secure signup is not connected.")}
 function showAdmin(){openModal("Admin panel — local demo",`<p class="muted">Products added here are saved only in this browser. There is no secure admin login or shared database yet. Do not use this as a public production admin panel.</p><form id="productForm"><div class="form-grid"><div class="field"><label>Product name *</label><input name="name" required placeholder="e.g. USB-C Hub"></div><div class="field"><label>Category *</label><input name="category" required placeholder="Accessories"></div><div class="field"><label>Price (₹) *</label><input name="price" type="number" min="1" required></div><div class="field"><label>Compare-at price (₹)</label><input name="oldPrice" type="number" min="0"></div><div class="field"><label>Product type</label><select name="kind"><option value="own">Own store</option><option value="affiliate">Affiliate</option></select></div><div class="field"><label>Emoji / icon</label><input name="emoji" maxlength="8" placeholder="📦"></div><div class="field full"><label>Short description</label><textarea name="description" rows="2" placeholder="Useful product details"></textarea></div><div class="field full"><label>Product / affiliate URL (optional)</label><input name="link" type="url" placeholder="https://..."><span class="muted">Use only a real product URL or your approved affiliate tracking URL.</span></div></div><button class="btn btn-primary" type="submit">＋ Add product</button></form><hr style="border:0;border-top:1px solid #e2eaf3;margin:20px 0"><h3>Current products (${products.length})</h3><div class="admin-list">${products.map(p=>`<div class="admin-item"><div><b>${esc(p.name)}</b><small>${esc(p.category)} · ${money(p.price)} · ${p.kind}</small></div><button class="btn btn-light" data-delete="${p.id}">Delete</button></div>`).join("")}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:15px"><button class="btn btn-light" id="exportProducts">Export product JSON</button><button class="btn btn-light" id="resetProducts">Reset sample products</button></div>`);
-$("#productForm").onsubmit=e=>{e.preventDefault();const f=new FormData(e.target);const p={id:Date.now(),name:f.get("name").trim(),category:f.get("category").trim(),price:+f.get("price"),oldPrice:+f.get("oldPrice")||0,kind:f.get("kind"),emoji:f.get("emoji")||"📦",description:f.get("description")||"",link:f.get("link")||"",featured:false};if(!p.name||!p.category||p.price<1)return;products.unshift(p);save();activeCategory="All";renderCategories();renderProducts();showAdmin();toast("Product added in this browser.")};
-$("#modalContent").querySelectorAll("[data-delete]").forEach(b=>b.onclick=()=>{products=products.filter(p=>p.id!==+b.dataset.delete);cart=cart.filter(c=>c.id!==+b.dataset.delete);save();renderCategories();renderProducts();renderCartCount();showAdmin()});
+
+$("#productForm").onsubmit = async e => {
+  e.preventDefault();
+
+  if (!supabaseAccessToken) {
+    alert("Please login to the admin panel first.");
+    adminLogin();
+    return;
+  }
+
+  const f = new FormData(e.target);
+  const p = {
+    name: f.get("name").trim(),
+    category: f.get("category").trim(),
+    price: Number(f.get("price")),
+    description: f.get("description") || "",
+    product_type: f.get("kind") === "own"
+      ? "own_store"
+      : "affiliate",
+    product_url: f.get("link") || "",
+    is_active: true
+  };
+
+  if (!p.name || !p.category || p.price < 1) {
+    alert("Please enter a product name, category and valid price.");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/rest/v1/products`,
+      {
+        method: "POST",
+        headers: {
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${supabaseAccessToken}`,
+          "Content-Type": "application/json",
+          Prefer: "return=minimal"
+        },
+        body: JSON.stringify(p)
+      }
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(error);
+    }
+
+    await loadSupabaseProducts();
+    activeCategory = "All";
+    renderCategories();
+    renderProducts();
+    showAdmin();
+    toast("Product saved to Supabase!");
+  } catch (error) {
+    alert("Product save failed: " + error.message);
+  }
+};
+
 $("#exportProducts").onclick=()=>{const blob=new Blob([JSON.stringify(products,null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="master-tech-products.json";a.click();URL.revokeObjectURL(a.href)};
 $("#resetProducts").onclick=()=>{if(confirm("Reset products to the original sample set?")){products=JSON.parse(JSON.stringify(starterProducts));save();renderCategories();renderProducts();showAdmin()}}
 }
